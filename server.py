@@ -8,7 +8,7 @@ player_id = 0
 lock = threading.Lock()
 
 def handle_client(conn, addr, pid):
-    print(f"Player {pid} connected")
+    print(f"Player {pid} connected from {addr}")
     try:
         conn.send(f"CONNECTED:{pid}\n".encode())
         
@@ -16,12 +16,17 @@ def handle_client(conn, addr, pid):
             if len(players) < 2:
                 conn.send("WAITING\n".encode())
         
-        # Ждем второго игрока
+        waited = 0
         while True:
             with lock:
                 if len(players) >= 2:
                     break
             time.sleep(1)
+            waited += 1
+            if waited > 60:
+                conn.send("TIMEOUT\n".encode())
+                conn.close()
+                return
         
         conn.send("MATCH_START:true\n".encode())
         print(f"Match started for player {pid}")
@@ -37,20 +42,28 @@ def handle_client(conn, addr, pid):
                             p[0].send(data.encode())
                         except:
                             pass
-    except:
-        pass
+    except Exception as e:
+        print(f"Error: {e}")
     finally:
         with lock:
-            players.remove((conn, pid))
+            for i, p in enumerate(players):
+                if p[0] == conn:
+                    players.pop(i)
+                    break
         print(f"Player {pid} disconnected")
 
 def start_server():
+    # Порт из переменной окружения Render
     port = int(os.environ.get("PORT", 8889))
+    
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind(('0.0.0.0', port))
     server.listen(2)
-    print(f"🏒 AIR HOCKEY SERVER STARTED on port {port}")
+    
+    # ЭТА СТРОКА ПОКАЖЕТ ПОРТ В ЛОГАХ!
+    print(f"SERVER STARTED ON PORT: {port}")
+    print(f"Connection string: air-hockey-server-1.onrender.com:{port}")
     
     global player_id
     while True:
